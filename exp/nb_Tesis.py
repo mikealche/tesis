@@ -12,7 +12,6 @@ from fastai.callbacks import *
 from IPython.display import clear_output
 from torchvision.transforms import *
 import torchvision.models as models
-from exp.nb_Tesis import *
 import time, sys
 from IPython.display import clear_output
 
