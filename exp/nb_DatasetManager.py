@@ -32,14 +32,18 @@ datasets = {
 
 
 
-
-def resize_one(fn, i, path, size,path_hr):
+def resize_one(fn, i, path, size,path_hr, should_crop):
     dest = path/fn.relative_to(path_hr)
     dest.parent.mkdir(parents=True, exist_ok=True)
     img = PIL.Image.open(fn)
     targ_sz = resize_to(img, size, use_min=True)
     img = img.resize(targ_sz, resample=PIL.Image.BICUBIC).convert('RGB')
     img.save(dest, quality=100)
+    if should_crop:
+        img = open_image(dest)
+        crop(img,size)
+        print('finished cropping')
+        img.save(dest)
 
 
 
@@ -50,18 +54,20 @@ class DatasetManager:
         self.dataset_type=dataset_type
         self.min_image_size = min_image_size
         self.amount_of_each_class = amount_of_each_class
-        self.classDict = {}
         self.df = pd.read_csv(datasets[year]['groundtruth'])
+
 
         image_col_name = 'image' if year != '2017' else 'image_id'
         self.dfSingleLabel = pd.DataFrame({'image':self.df[image_col_name] })
-        labelcols = self.df.columns[1:len(self.df.columns)]
-        self.dfSingleLabel['label'] = self.df[list(labelcols)].idxmax(axis='columns')
+        self.labelcols = self.df.columns[1:len(self.df.columns)]
+        self.dfSingleLabel['label'] = self.df[list(self.labelcols)].idxmax(axis='columns')
+        self.classDict = {k:0 for k in self.labelcols }
+
 
     def get_dataset_path(self):
         return Path(f'{self.year}_{self.dataset_type}_resized_to_{self.min_image_size}_picked_{self.amount_of_each_class}')
 
-    def generate_dataset(self,force=False):
+    def generate_dataset(self,force=False, should_crop=False):
         if not self.year in ['2017','2018','2019']: raise Exception('We don\'t have a dataset for that year')
         if not self.dataset_type in ['train_images','test_images']: raise Exception('We don\'t have a dataset for that year')
 
@@ -78,12 +84,12 @@ class DatasetManager:
         for p,size in sets:
             if not p.exists():
                 print(f"resizing to {size} into {p}")
-                parallel(partial(resize_one, path=p, size=size, path_hr=original_images_path), list_of_original_images_paths)
+                parallel(partial(resize_one, path=p, size=size, path_hr=original_images_path,should_crop=should_crop), list_of_original_images_paths)
                 return new_dataset_folder_name
             else:
                 if force:
                     new_dataset_folder_name.rmdir()
-                    parallel(partial(resize_one, path=p, size=size, path_hr=original_images_path), list_of_original_images_paths)
+                    parallel(partial(resize_one, path=p, size=size, path_hr=original_images_path, should_crop=should_crop), list_of_original_images_paths)
                     return new_dataset_folder_name
                 else:
                     print(f'folder already exists: {new_dataset_folder_name}')
@@ -95,12 +101,10 @@ class DatasetManager:
 
     def should_image_be_included(self, image_path):
         label = self.get_label_for_image_path(image_path)
-        if label in self.classDict: self.classDict[label] = self.classDict[label] + 1
-        else: self.classDict[label] = 1
-        if self.classDict[label] <= self.amount_of_each_class:
-            return True
+        if self.classDict[label] > self.amount_of_each_class: return False
         else:
-            return False
+            self.classDict[label] = self.classDict[label] + 1
+            return True
 
     def get_label_for_image_path(self,image_path):
         image_name = image_path.name[:-4]
