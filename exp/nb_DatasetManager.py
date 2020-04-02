@@ -5,6 +5,15 @@
 # file to edit: dev_nb/DatasetManager.ipynb
 
 from .nb_Tesis import *
+
+
+def is_number(s):
+    try:
+        float(s)
+        return True
+    except ValueError:
+        return False
+
 path_to_2017_train_raw = Path('ISIC-2017_Training_Data/')
 path_to_2018_train_raw = Path('ISIC2018_Task3_Training_Input/')
 path_to_2019_train_raw = Path('ISIC_2019_Training_Input/')
@@ -37,19 +46,19 @@ def resize_one(fn, i, path, size,path_hr, should_crop):
     dest.parent.mkdir(parents=True, exist_ok=True)
     img = PIL.Image.open(fn)
     targ_sz = resize_to(img, size, use_min=True)
-    img = img.resize(targ_sz, resample=PIL.Image.BICUBIC).convert('RGB')
+    img = img.resize(targ_sz, resample=PIL.Image.BILINEAR).convert('RGB')
     img.save(dest, quality=100)
     if should_crop:
         img = open_image(dest)
         crop(img,size)
-        print('finished cropping')
         img.save(dest)
 
 
 
 class DatasetManager:
-    def __init__(self,year, dataset_type,min_image_size, amount_of_each_class ):
+    def __init__(self,year, dataset_type,min_image_size, amount_of_each_class, year_to_train_for ):
         self.year = year
+        self.year_to_train_for = year_to_train_for
 
         self.dataset_type=dataset_type
         self.min_image_size = min_image_size
@@ -63,9 +72,13 @@ class DatasetManager:
         self.dfSingleLabel['label'] = self.df[list(self.labelcols)].idxmax(axis='columns')
         self.classDict = {k:0 for k in self.labelcols }
 
+        self.labels_exclusive_for_2019 = ['SCC']
 
     def get_dataset_path(self):
-        return Path(f'{self.year}_{self.dataset_type}_resized_to_{self.min_image_size}_picked_{self.amount_of_each_class}')
+        if not is_number(self.min_image_size):
+            return datasets[self.year][self.dataset_type]
+        else:
+            return Path(f'{self.year}_{self.dataset_type}_resized_to_{self.min_image_size}_picked_{self.amount_of_each_class}_training_for_{self.year_to_train_for or self.year}')
 
     def generate_dataset(self,force=False, should_crop=False):
         if not self.year in ['2017','2018','2019']: raise Exception('We don\'t have a dataset for that year')
@@ -96,12 +109,17 @@ class DatasetManager:
 
 
     def prune_image_list(self,image_list):
-        return list(filter(self.should_image_be_included, image_list))
+        res = []
+        for image in image_list:
+            if self.should_image_be_included(image):
+                res.append(image)
+        return res
 
 
     def should_image_be_included(self, image_path):
         label = self.get_label_for_image_path(image_path)
-        if self.classDict[label] > self.amount_of_each_class: return False
+        if self.year_to_train_for == '2018' and label in self.labels_exclusive_for_2019: return False
+        if self.classDict[label] >= self.amount_of_each_class: return False
         else:
             self.classDict[label] = self.classDict[label] + 1
             return True
