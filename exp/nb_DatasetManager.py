@@ -14,6 +14,15 @@ def is_number(s):
     except ValueError:
         return False
 
+def add_nevi(df):
+    df['nevus'] = df.apply(lambda row: 1.0 if row['melanoma'] == 0.0 and row['seborrheic_keratosis'] == 0.0 else 0.0,axis=1)
+    return df
+
+def group_seborrheic_keratosis_or_nevus(df):
+    df['seborrheic_keratosis_or_nevus'] = df.apply(lambda row: row['seborrheic_keratosis'] or row['nevus'], axis=1)
+    df.drop(['seborrheic_keratosis','nevus'],axis=1, inplace=True)
+    return df
+
 path_to_2017_train_raw = Path('ISIC-2017_Training_Data/')
 path_to_2018_train_raw = Path('ISIC2018_Task3_Training_Input/')
 path_to_2019_train_raw = Path('ISIC_2019_Training_Input/')
@@ -22,11 +31,19 @@ path_to_2017_train_gt = Path('ISIC_2017_train_gt.csv')
 path_to_2018_train_gt = Path('ISIC2018_Task3_Training_GroundTruth/ISIC2018_Task3_Training_GroundTruth.csv')
 path_to_2019_train_gt = Path('ISIC_2019_Training_GroundTruth.csv')
 
+path_to_2017_valid_raw = Path('ISIC-2017_Validation_Data/')
+path_to_2017_valid_gt = Path('ISIC_2017_valid_gt.csv')
+
+
+
+
 path_to_2018_test_raw = Path('ISIC2018_Task3_Test_Input/')
 datasets = {
     '2017': {
         'train_images': path_to_2017_train_raw,
-        'groundtruth': path_to_2017_train_gt
+        'groundtruth': path_to_2017_train_gt,
+        'valid_images': path_to_2017_valid_raw,
+        'valid_groundtruth': path_to_2017_valid_gt
     },
     '2018': {
         'train_images': path_to_2018_train_raw,
@@ -56,15 +73,18 @@ def resize_one(fn, i, path, size,path_hr, should_crop):
 
 
 class DatasetManager:
-    def __init__(self,year, dataset_type,min_image_size, amount_of_each_class, year_to_train_for ):
+    def __init__(self,year,min_image_size, amount_of_each_class, year_to_train_for ):
         self.year = year
         self.year_to_train_for = year_to_train_for
 
-        self.dataset_type=dataset_type
         self.min_image_size = min_image_size
         self.amount_of_each_class = amount_of_each_class
         self.df = pd.read_csv(datasets[year]['groundtruth'])
-
+        if self.year == '2017':
+            self.valid_df = pd.read_csv(datasets[year]['valid_groundtruth'])
+            self.df = pd.concat([self.df,self.valid_df])
+            add_nevi(self.df)
+            group_seborrheic_keratosis_or_nevus(self.df)
 
         image_col_name = 'image' if year != '2017' else 'image_id'
         self.dfSingleLabel = pd.DataFrame({'image':self.df[image_col_name] })
@@ -74,18 +94,21 @@ class DatasetManager:
 
         self.labels_exclusive_for_2019 = ['SCC']
 
-    def get_dataset_path(self):
+    def get_df(self):
+        return self.df
+
+    def get_dataset_path(self, dataset_type):
         if not is_number(self.min_image_size):
-            return datasets[self.year][self.dataset_type]
+            return datasets[self.year][dataset_type]
         else:
-            return Path(f'{self.year}_{self.dataset_type}_resized_to_{self.min_image_size}_picked_{self.amount_of_each_class}_training_for_{self.year_to_train_for or self.year}')
+            return Path(f'{self.year}_{dataset_type}_resized_to_{self.min_image_size}_picked_{self.amount_of_each_class}_training_for_{self.year_to_train_for or self.year}')
 
-    def generate_dataset(self,force=False, should_crop=False):
+    def generate_dataset(self,dataset_type, force=False, should_crop=False):
         if not self.year in ['2017','2018','2019']: raise Exception('We don\'t have a dataset for that year')
-        if not self.dataset_type in ['train_images','test_images']: raise Exception('We don\'t have a dataset for that year')
+        if not dataset_type in ['train_images','valid_images','test_images']: raise Exception('We don\'t have that dataset type')
 
-        new_dataset_folder_name = self.get_dataset_path()
-        original_images_path = datasets[self.year][self.dataset_type]
+        new_dataset_folder_name = self.get_dataset_path(dataset_type)
+        original_images_path = datasets[self.year][dataset_type]
         list_of_original_images_paths = ImageList.from_folder(original_images_path).items
 
         if self.amount_of_each_class != 'all':
