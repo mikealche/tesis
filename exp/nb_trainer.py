@@ -19,12 +19,5 @@ def get_class_weights(data):
     print
     return class_weights
 
-def train_learner(learner, epochs=8, lr=1e-3, wd = 1e-6, balanced=True,seed=1):
-    if balanced: learner.loss_func = CrossEntropyFlat(weight = get_class_weights(learner.data))
-    random_seed(seed,True)
-    learner.fit_one_cycle(epochs,max_lr=lr,wd=wd
-                          ,callbacks = [
-                            SaveModelCallback(learn=learner,monitor='accuracy',),
-                            CSVLogger(learn=learner)
-                            ]
-                         )
+def balance_learner(learner):
+    learner.loss_func = CrossEntropyFlat(weight = get_class_weights(learner.data))

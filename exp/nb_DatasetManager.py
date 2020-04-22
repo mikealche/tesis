@@ -5,6 +5,8 @@
 # file to edit: dev_nb/DatasetManager.ipynb
 
 from .nb_Tesis import *
+from .nb_ColorTransforms import *
+from IPython.display import clear_output
 
 
 def is_number(s):
@@ -58,10 +60,17 @@ datasets = {
 
 
 
-def resize_one(fn, i, path, size,path_hr, should_crop):
+
+import torchvision
+
+def resize_one(fn, i, path, size,path_hr, should_crop,transforms=[]):
+#     print('hereasdasd')
     dest = path/fn.relative_to(path_hr)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    img = PIL.Image.open(fn)
+
+    img = open_image(fn)
+    img = img.apply_tfms(transforms)
+    img = torchvision.transforms.ToPILImage()(img.data)
     targ_sz = resize_to(img, size, use_min=True)
     img = img.resize(targ_sz, resample=PIL.Image.BILINEAR).convert('RGB')
     img.save(dest, quality=100)
@@ -71,9 +80,8 @@ def resize_one(fn, i, path, size,path_hr, should_crop):
         img.save(dest)
 
 
-
 class DatasetManager:
-    def __init__(self,year,min_image_size, amount_of_each_class, year_to_train_for ):
+    def __init__(self,year,min_image_size, amount_of_each_class, year_to_train_for):
         self.year = year
         self.year_to_train_for = year_to_train_for
 
@@ -103,7 +111,7 @@ class DatasetManager:
         else:
             return Path(f'{self.year}_{dataset_type}_resized_to_{self.min_image_size}_picked_{self.amount_of_each_class}_training_for_{self.year_to_train_for or self.year}')
 
-    def generate_dataset(self,dataset_type, force=False, should_crop=False):
+    def generate_dataset(self,dataset_type, force=False, should_crop=False,transforms=[]):
         if not self.year in ['2017','2018','2019']: raise Exception('We don\'t have a dataset for that year')
         if not dataset_type in ['train_images','valid_images','test_images']: raise Exception('We don\'t have that dataset type')
 
@@ -120,15 +128,13 @@ class DatasetManager:
         for p,size in sets:
             if not p.exists():
                 print(f"resizing to {size} into {p}")
-                parallel(partial(resize_one, path=p, size=size, path_hr=original_images_path,should_crop=should_crop), list_of_original_images_paths)
+                for idx, image_path in enumerate(list_of_original_images_paths):
+                    print(f'Processing_{idx}/{len(list_of_original_images_paths)}')
+                    clear_output(wait=True)
+                    resize_one(image_path,idx, path=p, size=size, path_hr=original_images_path,should_crop=should_crop,transforms=transforms)
                 return new_dataset_folder_name
             else:
-                if force:
-                    new_dataset_folder_name.rmdir()
-                    parallel(partial(resize_one, path=p, size=size, path_hr=original_images_path, should_crop=should_crop), list_of_original_images_paths)
-                    return new_dataset_folder_name
-                else:
-                    print(f'folder already exists: {new_dataset_folder_name}')
+                print(f'folder already exists: {new_dataset_folder_name}')
 
 
     def prune_image_list(self,image_list):
@@ -150,3 +156,14 @@ class DatasetManager:
     def get_label_for_image_path(self,image_path):
         image_name = image_path.name[:-4]
         return list(self.dfSingleLabel.loc[self.dfSingleLabel['image']==image_name].label)[0]
+
+    def apply_tfms(self, dataset_type, tfms=[]):
+        print('asd')
+
+        parallel(self.apply_tfms_to_single_image(tfms), self.get_dataset_path(dataset_type).ls())
+
+    def apply_tfms_to_single_image(self, tfms):
+        def closure(img_path):
+            return 'je'
+        return closure
+
