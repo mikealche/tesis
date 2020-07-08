@@ -104,6 +104,8 @@ def xresnet50 (**kwargs): return XResNet.create(4, [3, 4,  6, 3], **kwargs)
 def xresnet101(**kwargs): return XResNet.create(4, [3, 4, 23, 3], **kwargs)
 def xresnet152(**kwargs): return XResNet.create(4, [3, 8, 36, 3], **kwargs)
 
+
+
 def random_seed(seed_value, use_cuda):
     np.random.seed(seed_value) # cpu vars
     torch.manual_seed(seed_value) # cpu  vars
@@ -113,3 +115,5 @@ def random_seed(seed_value, use_cuda):
         torch.cuda.manual_seed_all(seed_value) # gpu vars
         torch.backends.cudnn.deterministic = True  #needed
         torch.backends.cudnn.benchmark = False
+        
+        
